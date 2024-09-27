@@ -1,0 +1,59 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+int rssi1 = 0; // HD3
+int rssi2 = 0; // HD4
+int receivedCount = 0;
+
+void setup() {
+  // Start the serial communication
+  Serial.begin(9600);
+
+  // Initialize the LCD
+  lcd.begin();
+  lcd.clear();
+}
+
+void loop() {
+
+  if (Serial.available() > 0) {
+    // Read the incoming line
+    String receivedData = Serial.readStringUntil('\n');
+    receivedData.trim(); // Remove any leading/trailing whitespace
+
+    // Split the received data into room ID and RSSI
+    int delimiterIndex = receivedData.indexOf(',');
+    if (delimiterIndex != -1) {
+      int roomID = receivedData.substring(0, delimiterIndex).toInt();
+      int receivedRSSI = receivedData.substring(delimiterIndex + 1).toInt();
+
+      // Assign the RSSI value based on the room ID
+      if (roomID == 1) {
+        rssi1 = receivedRSSI;
+      } else if (roomID == 2) {
+        rssi2 = receivedRSSI;
+      }
+      receivedCount++; 
+      if(receivedCount >= 2){
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("HD3:");
+        lcd.print(rssi1);
+        lcd.setCursor(8, 0);
+        lcd.print("HD4:");
+        lcd.print(rssi2);
+      
+        if (rssi1 > rssi2) {
+        lcd.setCursor(0, 1);
+        lcd.print("Room HD3");
+        }
+        else if (rssi2 > rssi1) {
+        lcd.setCursor(0, 1);
+        lcd.print("Room HD4");
+        } else {}
+        receivedCount = 0;
+      }
+    }
+  }
+}
