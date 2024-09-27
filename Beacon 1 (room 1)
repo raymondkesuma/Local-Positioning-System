@@ -1,0 +1,71 @@
+#include <esp_now.h>
+#include <WiFi.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
+
+const int scanTime = 2; // seconds
+const uint8_t broadcastAddress[] = {0xD0, 0xEF, 0x76, 0x49, 0x37, 0x6C};
+BLEScan* pBLEScan;
+
+// Modified struct_message to include roomID
+struct struct_message {
+  char deviceName[32];
+  int rssi;
+  int roomID; // Added room identifier
+} myData;
+
+esp_now_peer_info_t peerInfo;
+
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+}
+
+void setup() {
+  Serial.begin(9600);
+  WiFi.mode(WIFI_STA);
+
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+
+  esp_now_register_send_cb(OnDataSent);
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+  
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("Failed to add peer");
+    return;
+  }
+
+  BLEDevice::init("");
+  pBLEScan = BLEDevice::getScan();
+  pBLEScan->setActiveScan(true);
+  pBLEScan->setInterval(100);
+  pBLEScan->setWindow(99);
+  Serial.println("Peer added successfully");
+  Serial.println("Scanning...");
+
+  // Assign roomID for each beacon before deployment
+  // For beacon1, use roomID = 1; for beacon2, use roomID = 2
+  myData.roomID = 1; // Change this to 2 for the second beacon
+}
+
+void loop() {
+  BLEScanResults* foundDevices = pBLEScan->start(scanTime, false);
+
+  for (int i = 0; i < foundDevices->getCount(); i++) {
+    BLEAdvertisedDevice device = foundDevices->getDevice(i);
+    if (device.haveName() && strcmp(device.getName().c_str(), "Mi Smart Band 6") == 0) {
+      myData.rssi = device.getRSSI();
+      strncpy(myData.deviceName, device.getName().c_str(), sizeof(myData.deviceName) - 1);
+      myData.deviceName[sizeof(myData.deviceName) - 1] = '\0';
+
+      esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&myData, sizeof(myData));
+      Serial.println(result == ESP_OK ? "Sending confirmed" : "Sending error");
+    }
+  }
+
+  pBLEScan->clearResults(); // Use the pointer to call clearResults
+}
